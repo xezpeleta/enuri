@@ -1,5 +1,30 @@
-# whisper_streaming
-Whisper realtime streaming for long speech-to-text transcription and translation
+# zuzeneko whistreaminga
+
+Whisper realtime streaming for long speech-to-text transcription using `xezpeleta/whisper-base-eu-ct2` model with faster-whisper.
+
+This project is just an experiment
+
+## Quickstart with docker
+
+Build the image:
+
+```bash
+docker build -t whistreaming .
+```
+
+Start the server:
+
+```bash
+docker run --gpus=all -it --rm -p 43001:43001 whistreaming
+```
+
+On the client:
+
+```bash
+arecord -f S16_LE -c1 -r 16000 -t raw -D default | nc 1.2.3.4 43001
+```
+
+
 
 **Turning Whisper into Real-Time Transcription System**
 
