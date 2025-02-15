@@ -796,7 +796,8 @@ def asr_factory(args, logfile=sys.stderr):
             asr_cls = WhisperTimestampedASR
 
         # Only for FasterWhisperASR and WhisperTimestampedASR
-        size = args.model
+        #size = args.model
+        size = "xezpeleta/whisper-base-eu-ct2"
         t = time.time()
         logger.info(f"Loading Whisper {size} model for {args.lan}...")
         asr = asr_cls(modelsize=size, lan=args.lan, cache_dir=args.model_cache_dir, model_dir=args.model_dir)
