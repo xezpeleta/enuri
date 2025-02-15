@@ -33,4 +33,5 @@ WORKDIR /app/whisper_streaming
 RUN uv python install 3.10 && uv venv --python 3.10
 RUN uv add --script whisper_online_server.py faster-whisper numpy librosa
 
-ENTRYPOINT ["uv", "run", "whisper_online_server.py", "--backend", "faster-whisper","--language", "eu", "--host", "localhost", "--port", "43001"]
+#ENTRYPOINT ["uv", "run", "whisper_online_server.py", "--backend", "faster-whisper","--language", "eu", "--host", "localhost", "--port", "43001"]
+ENTRYPOINT ["uv", "run", "whisper_online_server.py", "--task","transcribe","--min-chunk-size", "1","--buffer_trimming_sec","10","--backend", "faster-whisper","--language", "eu", "--host", "0.0.0.0", "--port", "43001","--warmup-file","usabiaga.wav"]
