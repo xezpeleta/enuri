@@ -766,7 +766,8 @@ def add_shared_args(parser):
     parser: argparse.ArgumentParser object
     """
     parser.add_argument('--min-chunk-size', type=float, default=1.0, help='Minimum audio chunk size in seconds. It waits up to this time to do processing. If the processing takes shorter time, it waits, otherwise it processes the whole segment that was received by this time.')
-    parser.add_argument('--model', type=str, default='large-v2', choices="tiny.en,tiny,base.en,base,small.en,small,medium.en,medium,large-v1,large-v2,large-v3,large,large-v3-turbo".split(","),help="Name size of the Whisper model to use (default: large-v2). The model is automatically downloaded from the model hub if not present in model cache dir.")
+    parser.add_argument('--model', type=str, default='large-v2', 
+                       help="Name/size of the model to use. Can be a predefined size (tiny.en, tiny, base.en, base, small.en, small, medium.en, medium, large-v1, large-v2, large-v3, large, large-v3-turbo) or a custom model from Hugging Face compatible with CTranslate2 (e.g. 'username/model-name')")
     parser.add_argument('--model_cache_dir', type=str, default=None, help="Overriding the default model cache dir where models downloaded from the hub are saved")
     parser.add_argument('--model_dir', type=str, default=None, help="Dir where Whisper model.bin and other files are saved. This option overrides --model and --model_cache_dir parameter.")
     parser.add_argument('--lan', '--language', type=str, default='auto', help="Source language code, e.g. en,de,cs, or 'auto' for language detection.")
@@ -777,7 +778,7 @@ def add_shared_args(parser):
     parser.add_argument('--vad', action="store_true", default=False, help='Use VAD = voice activity detection, with the default parameters.')
     parser.add_argument('--buffer_trimming', type=str, default="segment", choices=["sentence", "segment"],help='Buffer trimming strategy -- trim completed sentences marked with punctuation mark and detected by sentence segmenter, or the completed segments returned by Whisper. Sentence segmenter must be installed for "sentence" option.')
     parser.add_argument('--buffer_trimming_sec', type=float, default=15, help='Buffer trimming length threshold in seconds. If buffer length is longer, trimming sentence/segment is triggered.')
-    parser.add_argument("-l", "--log-level", dest="log_level", choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], help="Set the log level", default='DEBUG')
+    parser.add_argument("-l", "--log_level", dest="log_level", choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], help="Set the log level", default='DEBUG')
 
 def asr_factory(args, logfile=sys.stderr):
     """
@@ -795,12 +796,9 @@ def asr_factory(args, logfile=sys.stderr):
         else:
             asr_cls = WhisperTimestampedASR
 
-        # Only for FasterWhisperASR and WhisperTimestampedASR
-        #size = args.model
-        size = "xezpeleta/whisper-base-eu-ct2"
         t = time.time()
-        logger.info(f"Loading Whisper {size} model for {args.lan}...")
-        asr = asr_cls(modelsize=size, lan=args.lan, cache_dir=args.model_cache_dir, model_dir=args.model_dir)
+        logger.info(f"Loading Whisper model {args.model} for {args.lan}...")
+        asr = asr_cls(modelsize=args.model, lan=args.lan, cache_dir=args.model_cache_dir, model_dir=args.model_dir)
         e = time.time()
         logger.info(f"done. It took {round(e-t,2)} seconds.")
 
