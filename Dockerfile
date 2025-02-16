@@ -16,9 +16,6 @@ RUN DEBIAN_FRONTEND=noninteractive TZ=Europe/Madrid apt-get update && apt-get in
 # Set the working directory
 WORKDIR /app
 
-# Copy your local code into the container
-#COPY . /app
-
 # Upgrade pip and install PyTorch with CUDA support, plus required Python packages.
 RUN pip3 install torch torchaudio && \
     pip3 install --no-cache-dir librosa soundfile faster-whisper
@@ -29,9 +26,6 @@ RUN git clone https://github.com/xezpeleta/whisper_streaming.git
 
 WORKDIR /app/whisper_streaming
 
-# Uv commands
-#RUN uv python install 3.10 && uv venv --python 3.10
-#RUN uv add --script whisper_online_server.py faster-whisper numpy librosa
+COPY *wav .
 
-#ENTRYPOINT ["uv", "run", "whisper_online_server.py", "--backend", "faster-whisper","--language", "eu", "--host", "localhost", "--port", "43001"]
 ENTRYPOINT ["uv", "run", "whisper_online_server.py", "--task","transcribe","--min-chunk-size", "1","--buffer_trimming_sec","10","--backend", "faster-whisper","--language", "eu", "--host", "0.0.0.0", "--port", "43001","--warmup-file","usabiaga.wav", "--vac", "--vad", "--comp_unaware"]
