@@ -22,6 +22,12 @@ parser.add_argument("--port", type=int, default=43007)
 parser.add_argument("--web-port", type=int, default=5000)
 parser.add_argument("--warmup-file", type=str, dest="warmup_file",
         help="The path to a speech audio wav file to warm up Whisper.")
+parser.add_argument("--min-chars", type=int, default=50,
+        help="Minimum number of characters before displaying a line")
+parser.add_argument("--max-chars", type=int, default=150,
+        help="Maximum number of characters per line")
+parser.add_argument("--max-lines", type=int, default=2,
+        help="Maximum number of lines to display")
 
 # options from whisper_online
 add_shared_args(parser)
@@ -71,25 +77,26 @@ HTML_TEMPLATE = """
             color: white;
             text-shadow: 2px 2px 2px rgba(0,0,0,0.8);
         }
-        .transcription-segment {
+        .transcription-line {
             background-color: rgba(0,0,0,0.5);
             padding: 10px 20px;
             border-radius: 5px;
             margin: 5px 0;
             text-align: center;
+            min-height: 1.2em;
         }
-        .previous-line {
+        .top-line {
             opacity: 0.8;
         }
-        .current-line {
+        .bottom-line {
             font-weight: bold;
         }
     </style>
 </head>
 <body>
     <div id="transcription">
-        <div id="previous-segment" class="transcription-segment previous-line"></div>
-        <div id="current-segment" class="transcription-segment current-line"></div>
+        <div id="top-line" class="transcription-line top-line"></div>
+        <div id="bottom-line" class="transcription-line bottom-line"></div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
@@ -102,30 +109,35 @@ HTML_TEMPLATE = """
             transports: ['websocket']
         });
 
-        const previousSegment = document.getElementById('previous-segment');
-        const currentSegment = document.getElementById('current-segment');
+        const topLine = document.getElementById('top-line');
+        const bottomLine = document.getElementById('bottom-line');
 
         socket.on('connect', () => {
             console.log('Connected to server');
-            currentSegment.textContent = 'Connected to server...';
+            bottomLine.textContent = '';
+            topLine.textContent = '';
         });
 
         socket.on('connect_error', (error) => {
-            console.error('Connection error:', error);
-            currentSegment.textContent = 'Connection error, retrying...';
+            console.log('Connection error:', error);
+            bottomLine.textContent = 'Connection error, retrying...';
         });
 
         socket.on('disconnect', () => {
             console.log('Disconnected from server');
-            currentSegment.textContent = 'Disconnected from server...';
+            bottomLine.textContent = 'Disconnected from server...';
         });
 
         socket.on('transcription', function(data) {
-            console.log('Received transcription:', data);
-            const text = data.text.trim();
-            if (text) {
-                previousSegment.textContent = currentSegment.textContent;
-                currentSegment.textContent = text;
+            if (!data.text) return;
+            
+            if (data.type === 'word') {
+                // Update bottom line with new text
+                bottomLine.textContent = data.text;
+            } else if (data.type === 'line_complete') {
+                // Move completed line to top and clear bottom
+                topLine.textContent = data.text;
+                bottomLine.textContent = '';
             }
         });
     </script>
@@ -158,7 +170,31 @@ class ServerProcessor:
         self.online_asr_proc = online_asr_proc
         self.min_chunk = min_chunk
         self.last_end = None
+        self.current_line = ""
+        self.previous_text = ""
         self.is_first = True
+        self.buffer = ""
+
+    def split_text_by_max_chars(self, text, max_chars):
+        words = text.split()
+        first_part = []
+        remaining_part = []
+        current_length = 0
+
+        for word in words:
+            # Add space to length calculation if not first word
+            if current_length > 0:
+                word_length = len(word) + 1  # +1 for space
+            else:
+                word_length = len(word)
+
+            if current_length + word_length <= max_chars:
+                first_part.append(word)
+                current_length += word_length
+            else:
+                remaining_part.append(word)
+
+        return ' '.join(first_part), ' '.join(remaining_part)
 
     def receive_audio_chunk(self):
         out = []
@@ -195,20 +231,83 @@ class ServerProcessor:
 
     def process(self):
         self.online_asr_proc.init()
+        
         while True:
             a = self.receive_audio_chunk()
             if a is None:
                 break
+                
             self.online_asr_proc.insert_audio_chunk(a)
             o = self.online_asr_proc.process_iter()
+            
             try:
                 if o and o[2]:
-                    # Remove anything inside brackets including the brackets
+                    # Clean the text
                     text = re.sub(r'\[.*?\]', '', o[2])
-                    # Clean up any double spaces that might result
                     text = ' '.join(text.split())
-                    if text:
-                        socketio.emit('transcription', {"text": text.strip()})
+                    
+                    if text and text != self.previous_text:
+                        # Check if adding new text would exceed max_chars
+                        new_buffer = f"{self.buffer} {text}".strip()
+                        
+                        if len(new_buffer) <= args.max_chars:
+                            # If it fits, add it to current buffer
+                            self.buffer = new_buffer
+                            socketio.emit('transcription', {
+                                "type": "word",
+                                "text": self.buffer
+                            })
+                        else:
+                            # If current buffer is empty, split the new text
+                            if not self.buffer:
+                                first_part, remaining = self.split_text_by_max_chars(text, args.max_chars)
+                                self.buffer = first_part
+                                
+                                # Emit the first part
+                                socketio.emit('transcription', {
+                                    "type": "word",
+                                    "text": self.buffer
+                                })
+                                
+                                if remaining:
+                                    # Move current line to top and start new line with remaining
+                                    socketio.emit('transcription', {
+                                        "type": "line_complete",
+                                        "text": self.buffer
+                                    })
+                                    self.buffer = remaining
+                                    socketio.emit('transcription', {
+                                        "type": "word",
+                                        "text": self.buffer
+                                    })
+                            else:
+                                # Move current buffer to top line
+                                socketio.emit('transcription', {
+                                    "type": "line_complete",
+                                    "text": self.buffer
+                                })
+                                # Start new line with new text
+                                first_part, remaining = self.split_text_by_max_chars(text, args.max_chars)
+                                self.buffer = first_part
+                                socketio.emit('transcription', {
+                                    "type": "word",
+                                    "text": self.buffer
+                                })
+                                
+                                if remaining:
+                                    # Handle remaining text
+                                    socketio.emit('transcription', {
+                                        "type": "line_complete",
+                                        "text": self.buffer
+                                    })
+                                    self.buffer = remaining
+                                    socketio.emit('transcription', {
+                                        "type": "word",
+                                        "text": self.buffer
+                                    })
+
+                        self.previous_text = text
+
             except Exception as e:
                 logger.error(f"Error sending result: {e}")
                 break
