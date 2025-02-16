@@ -15,14 +15,16 @@ docker build -t whistreaming .
 Start the server:
 
 ```bash
-docker run --gpus=all -it --rm -p 43001:43001 whistreaming
+docker run --gpus=all -it --rm -p 43007:43007 -p 5000:5000 whistreaming --model=tiny --language en --warmup-file english.wav --web-port 5000 --vac
 ```
 
 On the client:
 
 ```bash
-arecord -f S16_LE -c1 -r 16000 -t raw -D default | nc 1.2.3.4 43001
+arecord -f S16_LE -c1 -r 16000 -t raw -D default | nc 10.2.26.97 43007
 ```
+
+On the browser you will see the transcription in real-time.
 
 
 
