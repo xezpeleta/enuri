@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from whisper_online import *
-from flask import Flask, render_template_string
+from flask import Flask, render_template_string, request
 from flask_socketio import SocketIO
 import sys
 import argparse
@@ -32,7 +32,19 @@ SAMPLING_RATE = 16000
 
 # Initialize Flask and SocketIO
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", logger=True, engineio_logger=True)
+
+@socketio.on('connect')
+def handle_connect():
+    logger.info(f'Client connected from {request.remote_addr}')
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    logger.info('Client disconnected')
+
+@socketio.on_error()
+def error_handler(e):
+    logger.error(f'SocketIO error: {str(e)}')
 
 # HTML template for the web interface
 HTML_TEMPLATE = """
@@ -41,19 +53,30 @@ HTML_TEMPLATE = """
 <head>
     <title>Live Transcription</title>
     <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: transparent;
+            overflow: hidden;
+        }
         #transcription {
-            width: 80%;
-            height: 400px;
-            margin: 20px auto;
+            width: 100%;
+            min-height: 100vh;
             padding: 20px;
-            border: 1px solid #ccc;
-            overflow-y: auto;
             font-family: Arial, sans-serif;
+            font-size: 24px;
+            color: white;
+            text-shadow: 2px 2px 2px rgba(0,0,0,0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         .transcription-segment {
-            margin-bottom: 10px;
-            padding: 5px;
-            background-color: #f9f9f9;
+            background-color: rgba(0,0,0,0.5);
+            padding: 10px 20px;
+            border-radius: 5px;
+            margin: 5px 0;
+            text-align: center;
         }
     </style>
 </head>
@@ -62,15 +85,37 @@ HTML_TEMPLATE = """
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script>
-        const socket = io.connect('http://' + document.domain + ':5001');
+        const socket = io.connect('http://' + document.domain + ':' + {{ web_port }}, {
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            reconnectionAttempts: 5
+        });
         const transcriptionDiv = document.getElementById('transcription');
+
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+
+        socket.on('connect_error', (error) => {
+            console.error('Connection error:', error);
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+        });
 
         socket.on('transcription', function(data) {
             const segment = document.createElement('div');
             segment.className = 'transcription-segment';
-            segment.textContent = `[${Math.floor(data.start/1000)}s - ${Math.floor(data.end/1000)}s] ${data.text}`;
+            segment.textContent = data.text;
+            
+            // Remove previous segments
+            while (transcriptionDiv.firstChild) {
+                transcriptionDiv.removeChild(transcriptionDiv.firstChild);
+            }
+            
             transcriptionDiv.appendChild(segment);
-            transcriptionDiv.scrollTop = transcriptionDiv.scrollHeight;
         });
     </script>
 </body>
@@ -79,7 +124,7 @@ HTML_TEMPLATE = """
 
 @app.route('/')
 def index():
-    return render_template_string(HTML_TEMPLATE)
+    return render_template_string(HTML_TEMPLATE, web_port=args.web_port)
 
 class Connection:
     '''it wraps conn object'''
@@ -186,4 +231,4 @@ if __name__ == '__main__':
 
     # Start the web server
     logger.info(f'Starting web server on port {args.web_port}')
-    socketio.run(app, host=args.host, port=args.web_port)
+    socketio.run(app, host=args.host, port=args.web_port, debug=True)
