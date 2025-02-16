@@ -94,33 +94,37 @@ HTML_TEMPLATE = """
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script>
-        const socket = io.connect('http://' + document.domain + ':' + {{ web_port }}, {
+        const socket = io({
             reconnection: true,
             reconnectionDelay: 1000,
             reconnectionDelayMax: 5000,
-            reconnectionAttempts: 5
+            reconnectionAttempts: Infinity,
+            transports: ['websocket']
         });
+
         const previousSegment = document.getElementById('previous-segment');
         const currentSegment = document.getElementById('current-segment');
 
         socket.on('connect', () => {
             console.log('Connected to server');
+            currentSegment.textContent = 'Connected to server...';
         });
 
         socket.on('connect_error', (error) => {
             console.error('Connection error:', error);
+            currentSegment.textContent = 'Connection error, retrying...';
         });
 
         socket.on('disconnect', () => {
             console.log('Disconnected from server');
+            currentSegment.textContent = 'Disconnected from server...';
         });
 
         socket.on('transcription', function(data) {
+            console.log('Received transcription:', data);
             const text = data.text.trim();
             if (text) {
-                // Move current text to previous line
                 previousSegment.textContent = currentSegment.textContent;
-                // Update current line with new text
                 currentSegment.textContent = text;
             }
         });
@@ -222,18 +226,31 @@ def run_audio_server():
         logger.info("Whisper is warmed up.")
 
     # Start audio server
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind((args.host, args.port))
-        s.listen(1)
-        logger.info(f'Listening for audio on {args.host}:{args.port}')
-        while True:
-            conn, addr = s.accept()
-            logger.info(f'Connected to client on {addr}')
-            connection = Connection(conn)
-            proc = ServerProcessor(connection, online, args.min_chunk_size)
-            proc.process()
-            conn.close()
-            logger.info('Connection to client closed')
+    while True:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                # Add socket reuse option
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind((args.host, args.port))
+                s.listen(1)
+                logger.info(f'Listening for audio on {args.host}:{args.port}')
+                
+                while True:
+                    try:
+                        conn, addr = s.accept()
+                        logger.info(f'Connected to client on {addr}')
+                        connection = Connection(conn)
+                        proc = ServerProcessor(connection, online, args.min_chunk_size)
+                        proc.process()
+                    except Exception as e:
+                        logger.error(f'Error processing connection: {e}')
+                    finally:
+                        conn.close()
+                        logger.info('Connection to client closed')
+        except Exception as e:
+            logger.error(f'Server error: {e}')
+            import time
+            time.sleep(1)  # Wait before attempting to restart
 
 if __name__ == '__main__':
     # Start the audio server in a separate thread
@@ -241,6 +258,11 @@ if __name__ == '__main__':
     audio_thread.daemon = True
     audio_thread.start()
 
-    # Start the web server
+    # Start the web server with improved settings
     logger.info(f'Starting web server on port {args.web_port}')
-    socketio.run(app, host=args.host, port=args.web_port, debug=True)
+    socketio.run(app, 
+                host=args.host, 
+                port=args.web_port, 
+                debug=True,
+                allow_unsafe_werkzeug=True,  # Required for debug mode
+                use_reloader=False)  # Disable reloader to prevent duplicate threads
