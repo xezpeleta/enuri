@@ -146,7 +146,7 @@ class ServerProcessor:
             if a is None:
                 break
             self.online_asr_proc.insert_audio_chunk(a)
-            o = online.process_iter()
+            o = self.online_asr_proc.process_iter()
             try:
                 self.send_result(o)
             except Exception as e:
