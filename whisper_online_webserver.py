@@ -11,6 +11,7 @@ import threading
 import socket
 import soundfile
 import io
+import re  # Add import for regular expressions
 
 logger = logging.getLogger(__name__)
 parser = argparse.ArgumentParser()
@@ -106,9 +107,10 @@ HTML_TEMPLATE = """
         });
 
         socket.on('transcription', function(data) {
+            const text = data.text.trim();
             const segment = document.createElement('div');
             segment.className = 'transcription-segment';
-            segment.textContent = data.text;
+            segment.textContent = text;
             
             // Remove previous segments
             while (transcriptionDiv.firstChild) {
@@ -169,19 +171,17 @@ class ServerProcessor:
         return np.concatenate(out)
 
     def format_output_transcript(self, o):
-        if o[0] is not None:
-            beg, end = o[0]*1000, o[1]*1000
-            if self.last_end is not None:
-                beg = max(beg, self.last_end)
-            self.last_end = end
-            return {"start": beg, "end": end, "text": o[2]}
+        if o[2]:  # if there's text
+            # Just send the text, without timestamps
+            text = o[2].replace('[', '').replace(']', '')  # Remove any remaining brackets
+            # Remove any timestamp patterns at the start of the text
+            text = re.sub(r'^\d+s\s*-\s*\d+s\s*', '', text)
+            return {"text": text.strip()}
         return None
 
     def send_result(self, o):
         result = self.format_output_transcript(o)
         if result is not None:
-            print(f"{result['start']} {result['end']} {result['text']}", 
-                  flush=True, file=sys.stderr)
             socketio.emit('transcription', result)
 
     def process(self):
@@ -193,13 +193,20 @@ class ServerProcessor:
             self.online_asr_proc.insert_audio_chunk(a)
             o = self.online_asr_proc.process_iter()
             try:
-                self.send_result(o)
+                if o and o[2]:
+                    # Remove anything inside brackets including the brackets
+                    text = re.sub(r'\[.*?\]', '', o[2])
+                    # Clean up any double spaces that might result
+                    text = ' '.join(text.split())
+                    if text:
+                        socketio.emit('transcription', {"text": text.strip()})
             except Exception as e:
                 logger.error(f"Error sending result: {e}")
                 break
 
 def run_audio_server():
-    # Initialize Whisper
+    # Initialize Whisper with timestamps disabled
+    args.show_timestamps = False  # Force timestamps off for web interface
     asr, online = asr_factory(args)
     min_chunk = args.min_chunk_size
 

@@ -31,8 +31,9 @@ class ASRBase:
     sep = " "   # join transcribe words with this character (" " for whisper_timestamped,
                 # "" for faster-whisper because it emits the spaces when neeeded)
 
-    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, logfile=sys.stderr):
+    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, logfile=sys.stderr, show_timestamps=True):
         self.logfile = logfile
+        self.show_timestamps = show_timestamps
 
         self.transcribe_kargs = {}
         if lan == "auto":
@@ -271,13 +272,14 @@ class MLXWhisper(ASRBase):
 class OpenaiApiASR(ASRBase):
     """Uses OpenAI's Whisper API for audio transcription."""
 
-    def __init__(self, lan=None, temperature=0, logfile=sys.stderr):
+    def __init__(self, lan=None, temperature=0, logfile=sys.stderr, show_timestamps=True):
         self.logfile = logfile
 
         self.modelname = "whisper-1"  
         self.original_language = None if lan == "auto" else lan # ISO-639-1 language code
         self.response_format = "verbose_json" 
         self.temperature = temperature
+        self.show_timestamps = show_timestamps
 
         self.load_model()
 
@@ -611,7 +613,7 @@ class OnlineASRProcessor:
         return f
 
 
-    def to_flush(self, sents, sep=None, offset=0, ):
+    def to_flush(self, sents, sep=None, offset=0):
         # concatenates the timestamped words or sentences into one sequence that is flushed in one line
         # sents: [(beg1, end1, "sentence1"), ...] or [] if empty
         # return: (beg1,end-of-last-sentence,"concatenation of sentences") or (None, None, "") if empty
@@ -624,7 +626,10 @@ class OnlineASRProcessor:
         else:
             b = offset + sents[0][0]
             e = offset + sents[-1][1]
-        return (b,e,t)
+            
+        if hasattr(self.asr, 'show_timestamps') and not self.asr.show_timestamps:
+            return (None, None, t)  # Return just the text without timestamps
+        return (b, e, t)
 
 class VACOnlineASRProcessor(OnlineASRProcessor):
     '''Wraps OnlineASRProcessor with VAC (Voice Activity Controller). 
@@ -778,6 +783,7 @@ def add_shared_args(parser):
     parser.add_argument('--vad', action="store_true", default=False, help='Use VAD = voice activity detection, with the default parameters.')
     parser.add_argument('--buffer_trimming', type=str, default="segment", choices=["sentence", "segment"],help='Buffer trimming strategy -- trim completed sentences marked with punctuation mark and detected by sentence segmenter, or the completed segments returned by Whisper. Sentence segmenter must be installed for "sentence" option.')
     parser.add_argument('--buffer_trimming_sec', type=float, default=15, help='Buffer trimming length threshold in seconds. If buffer length is longer, trimming sentence/segment is triggered.')
+    parser.add_argument('--show-timestamps', action="store_true", default=False, help='Show timestamps in the output. Default is False.')
     parser.add_argument("-l", "--log_level", dest="log_level", choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], help="Set the log level", default='DEBUG')
 
 def asr_factory(args, logfile=sys.stderr):
@@ -787,7 +793,7 @@ def asr_factory(args, logfile=sys.stderr):
     backend = args.backend
     if backend == "openai-api":
         logger.debug("Using OpenAI API.")
-        asr = OpenaiApiASR(lan=args.lan)
+        asr = OpenaiApiASR(lan=args.lan, show_timestamps=args.show_timestamps)
     else:
         if backend == "faster-whisper":
             asr_cls = FasterWhisperASR
@@ -798,7 +804,7 @@ def asr_factory(args, logfile=sys.stderr):
 
         t = time.time()
         logger.info(f"Loading Whisper model {args.model} for {args.lan}...")
-        asr = asr_cls(modelsize=args.model, lan=args.lan, cache_dir=args.model_cache_dir, model_dir=args.model_dir)
+        asr = asr_cls(modelsize=args.model, lan=args.lan, cache_dir=args.model_cache_dir, model_dir=args.model_dir, show_timestamps=args.show_timestamps)
         e = time.time()
         logger.info(f"done. It took {round(e-t,2)} seconds.")
 
