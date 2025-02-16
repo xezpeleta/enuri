@@ -56,21 +56,20 @@ HTML_TEMPLATE = """
     <style>
         body {
             margin: 0;
-            padding: 0;
+            padding: 20px;
             background-color: transparent;
             overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            min-height: 100vh;
+            box-sizing: border-box;
         }
         #transcription {
-            width: 100%;
-            min-height: 100vh;
-            padding: 20px;
             font-family: Arial, sans-serif;
             font-size: 24px;
             color: white;
             text-shadow: 2px 2px 2px rgba(0,0,0,0.8);
-            display: flex;
-            align-items: center;
-            justify-content: center;
         }
         .transcription-segment {
             background-color: rgba(0,0,0,0.5);
@@ -79,10 +78,19 @@ HTML_TEMPLATE = """
             margin: 5px 0;
             text-align: center;
         }
+        .previous-line {
+            opacity: 0.8;
+        }
+        .current-line {
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
-    <div id="transcription"></div>
+    <div id="transcription">
+        <div id="previous-segment" class="transcription-segment previous-line"></div>
+        <div id="current-segment" class="transcription-segment current-line"></div>
+    </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script>
@@ -92,7 +100,8 @@ HTML_TEMPLATE = """
             reconnectionDelayMax: 5000,
             reconnectionAttempts: 5
         });
-        const transcriptionDiv = document.getElementById('transcription');
+        const previousSegment = document.getElementById('previous-segment');
+        const currentSegment = document.getElementById('current-segment');
 
         socket.on('connect', () => {
             console.log('Connected to server');
@@ -108,16 +117,12 @@ HTML_TEMPLATE = """
 
         socket.on('transcription', function(data) {
             const text = data.text.trim();
-            const segment = document.createElement('div');
-            segment.className = 'transcription-segment';
-            segment.textContent = text;
-            
-            // Remove previous segments
-            while (transcriptionDiv.firstChild) {
-                transcriptionDiv.removeChild(transcriptionDiv.firstChild);
+            if (text) {
+                // Move current text to previous line
+                previousSegment.textContent = currentSegment.textContent;
+                // Update current line with new text
+                currentSegment.textContent = text;
             }
-            
-            transcriptionDiv.appendChild(segment);
         });
     </script>
 </body>
