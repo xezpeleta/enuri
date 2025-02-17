@@ -91,6 +91,9 @@ HTML_TEMPLATE = """
         .bottom-line {
             font-weight: bold;
         }
+        .last-word {
+            color: yellow;
+        }
     </style>
 </head>
 <body>
@@ -132,8 +135,8 @@ HTML_TEMPLATE = """
             if (!data.text) return;
             
             if (data.type === 'word') {
-                // Update bottom line with new text
-                bottomLine.textContent = data.text;
+                // Highlight the entire new word type message
+                bottomLine.innerHTML = '<span class="last-word">' + data.text + '</span>';
             } else if (data.type === 'line_complete') {
                 // Move completed line to top and clear bottom
                 topLine.textContent = data.text;
