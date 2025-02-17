@@ -114,11 +114,13 @@ HTML_TEMPLATE = """
 
         const topLine = document.getElementById('top-line');
         const bottomLine = document.getElementById('bottom-line');
+        let previousText = '';
 
         socket.on('connect', () => {
             console.log('Connected to server');
             bottomLine.textContent = '';
             topLine.textContent = '';
+            previousText = '';
         });
 
         socket.on('connect_error', (error) => {
@@ -135,12 +137,24 @@ HTML_TEMPLATE = """
             if (!data.text) return;
             
             if (data.type === 'word') {
-                // Highlight the entire new word type message
-                bottomLine.innerHTML = '<span class="last-word">' + data.text + '</span>';
+                // Find the newly added text by comparing with previous text
+                const newText = data.text;
+                let highlightedText = '';
+                
+                if (previousText && newText.startsWith(previousText)) {
+                    const addedText = newText.slice(previousText.length).trim();
+                    highlightedText = previousText + ' <span class="last-word">' + addedText + '</span>';
+                } else {
+                    highlightedText = '<span class="last-word">' + newText + '</span>';
+                }
+                
+                bottomLine.innerHTML = highlightedText;
+                previousText = newText;
             } else if (data.type === 'line_complete') {
                 // Move completed line to top and clear bottom
                 topLine.textContent = data.text;
                 bottomLine.textContent = '';
+                previousText = '';
             }
         });
     </script>
