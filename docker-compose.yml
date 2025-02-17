@@ -3,11 +3,12 @@ version: '3.8'
 services:
   whistreaming:
     build: .
-    command: --model=tiny.en --language en --warmup-file samples/english.wav --web-port 5000
-    # command: --model=xezpeleta/whisper-base-eu-ct2 --language eu --warmup-file samples/basque.wav --web-port 5000
+      #command: --model=tiny.en --language en --warmup-file samples/english.wav --web-port 5000
+    command: --model=xezpeleta/whisper-base-eu-ct2 --language eu --warmup-file samples/basque.wav --web-port 5000
     ports:
       - "43007:43007"
       - "5000:5000"
+      - "5001:5001"
     deploy:
       resources:
         reservations:

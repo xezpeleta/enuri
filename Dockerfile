@@ -22,10 +22,12 @@ RUN pip3 install torch torchaudio && \
 
 # Install uv
 RUN pip3 install uv
-RUN git clone https://github.com/xezpeleta/whisper_streaming.git
+RUN git clone https://github.com/xezpeleta/zuzeneko_whistreaminga.git
 
-WORKDIR /app/whisper_streaming
+WORKDIR /app/zuzeneko_whistreaminga
 
-COPY *wav .
+RUN pip install -r requirements.web.txt
+COPY samples .
 
-ENTRYPOINT ["uv", "run", "whisper_online_server.py", "--task","transcribe","--min-chunk-size", "1","--buffer_trimming_sec","10","--backend", "faster-whisper","--language", "eu", "--host", "0.0.0.0", "--port", "43001","--warmup-file","usabiaga.wav", "--vac", "--vad", "--comp_unaware"]
+ENTRYPOINT ["uv", "run", "whisper_online_webserver.py"]
+CMD ["--task", "transcribe", "--buffer_trimming_sec", "10", "--backend", "faster-whisper", "--model","tiny.en", "--language", "en"]
