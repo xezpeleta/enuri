@@ -46,7 +46,7 @@ def handle_connect():
     logger.info(f'Client connected from {request.remote_addr}')
 
 @socketio.on('disconnect')
-def handle_disconnect():
+def handle_disconnect(sid=None):
     logger.info('Client disconnected')
 
 @socketio.on_error()
